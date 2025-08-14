@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 
 type GFile = {
   id: string;
@@ -11,6 +12,27 @@ type GFile = {
 };
 
 export default function Home() {
+  const { data: session, status } = useSession();
+
+  // Not signed in → show a simple sign-in screen
+  if (status !== 'authenticated') {
+    return (
+      <main className="min-h-screen grid place-items-center p-6">
+        <div className="border rounded-xl p-6 max-w-md w-full text-center">
+          <h1 className="text-2xl font-semibold mb-2">DiGiulio Agent Dashboard</h1>
+          <p className="text-gray-600 mb-6">Sign in with your @digiuliogroup.com account to continue.</p>
+          <button
+            onClick={() => signIn('google')}
+            className="border rounded px-4 py-2"
+          >
+            Sign in with Google
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // Signed in → show search UI
   const [q, setQ] = useState('lease');
   const [files, setFiles] = useState<GFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,7 +57,15 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Agent Dashboard — Docs Search</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold">Agent Dashboard — Docs Search</h1>
+        <div className="text-sm text-gray-600 flex items-center gap-3">
+          <span>{session?.user?.email}</span>
+          <button className="border rounded px-3 py-1" onClick={() => signOut()}>
+            Sign out
+          </button>
+        </div>
+      </div>
 
       <form onSubmit={search} className="flex gap-2 mb-6">
         <input
