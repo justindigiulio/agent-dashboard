@@ -13,29 +13,32 @@ function isAllowed(email?: string): boolean {
   return (domain && domains.includes(domain)) || emails.includes(e);
 }
 
-const authOptions = {
+const handler = NextAuth({
+  /** Important: fixes custom-domain/redirect loops */
+  trustHost: true,
+
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
-  session: { strategy: "jwt" as const },
+
+  session: { strategy: "jwt" },
+
   callbacks: {
-    async signIn({ user }: any) {
+    async signIn({ user }) {
       return isAllowed(user?.email || "");
     },
-    async session({ session, token }: any) {
+    async session({ session, token }) {
       if (session.user && token.email) session.user.email = token.email as string;
       return session;
     },
-    async jwt({ token, profile }: any) {
+    async jwt({ token, profile }) {
       if (profile?.email) token.email = profile.email;
       return token;
     },
   },
-  pages: { signIn: "/api/auth/signin" },
-};
+});
 
-const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
