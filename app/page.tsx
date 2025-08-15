@@ -1,6 +1,9 @@
 'use client';
-import { useState } from 'react';
-import { useSession, signIn, signOut } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+
+type Session = {
+  user?: { email?: string };
+} | null;
 
 type GFile = {
   id: string;
@@ -12,27 +15,51 @@ type GFile = {
 };
 
 export default function Home() {
-  const { data: session, status } = useSession();
+  const [session, setSession] = useState<Session>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
 
-  // Not signed in → show a simple sign-in screen
-  if (status !== 'authenticated') {
+  useEffect(() => {
+    async function load() {
+      try {
+        const r = await fetch('/api/auth/session', { cache: 'no-store' });
+        const data = await r.json().catch(() => null);
+        setSession(data && data.user ? data : null);
+      } catch {
+        setSession(null);
+      } finally {
+        setLoadingSession(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loadingSession) {
+    return (
+      <main className="min-h-screen grid place-items-center p-6">
+        <div className="text-gray-600">Loading…</div>
+      </main>
+    );
+  }
+
+  if (!session?.user?.email) {
     return (
       <main className="min-h-screen grid place-items-center p-6">
         <div className="border rounded-xl p-6 max-w-md w-full text-center">
           <h1 className="text-2xl font-semibold mb-2">DiGiulio Agent Dashboard</h1>
-          <p className="text-gray-600 mb-6">Sign in with your @digiuliogroup.com account to continue.</p>
-          <button
-            onClick={() => signIn('google')}
-            className="border rounded px-4 py-2"
+          <p className="text-gray-600 mb-6">
+            Sign in with your <strong>@digiuliogroup.com</strong> account to continue.
+          </p>
+          <a
+            href="/api/auth/signin?callbackUrl=/"
+            className="inline-block border rounded px-4 py-2"
           >
             Sign in with Google
-          </button>
+          </a>
         </div>
       </main>
     );
   }
 
-  // Signed in → show search UI
   const [q, setQ] = useState('lease');
   const [files, setFiles] = useState<GFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,10 +87,10 @@ export default function Home() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Agent Dashboard — Docs Search</h1>
         <div className="text-sm text-gray-600 flex items-center gap-3">
-          <span>{session?.user?.email}</span>
-          <button className="border rounded px-3 py-1" onClick={() => signOut()}>
+          <span>{session.user?.email}</span>
+          <a className="border rounded px-3 py-1" href="/api/auth/signout?callbackUrl=/">
             Sign out
-          </button>
+          </a>
         </div>
       </div>
 
