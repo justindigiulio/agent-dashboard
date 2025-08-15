@@ -2,7 +2,6 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
-/** Force Node runtime (NextAuth can't run on Edge) and avoid caching */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -18,18 +17,13 @@ function isAllowed(email?: string): boolean {
 }
 
 const handler = NextAuth({
-  /** Prevents redirect loops behind custom domains */
-  trustHost: true,
-
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
-
   session: { strategy: "jwt" },
-
   callbacks: {
     async signIn({ user }) {
       return isAllowed(user?.email || "");
