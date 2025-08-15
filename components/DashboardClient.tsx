@@ -11,7 +11,7 @@ type GFile = {
 };
 
 export default function DashboardClient({ email }: { email?: string }) {
-  const [q, setQ] = useState('lease');
+  const [q, setQ] = useState('');
   const [files, setFiles] = useState<GFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
