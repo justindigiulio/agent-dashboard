@@ -2,6 +2,10 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
+/** Force Node runtime (NextAuth can't run on Edge) and avoid caching */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function isAllowed(email?: string): boolean {
   if (!email) return false;
   const e = email.toLowerCase();
@@ -14,7 +18,7 @@ function isAllowed(email?: string): boolean {
 }
 
 const handler = NextAuth({
-  /** Important: fixes custom-domain/redirect loops */
+  /** Prevents redirect loops behind custom domains */
   trustHost: true,
 
   providers: [
