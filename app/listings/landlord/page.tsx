@@ -20,8 +20,8 @@ type Listing = {
   message_id?: string;
 };
 
-function fmtPrice(v: number | '' ) {
-  if (v === '' || typeof v !== 'number') return '';
+function fmtPrice(v: number | '' | null | undefined) {
+  if (v === '' || v == null || typeof v !== 'number') return '';
   return `$${v.toLocaleString()}`;
 }
 function fmtDate(s?: string) {
