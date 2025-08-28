@@ -1,9 +1,7 @@
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   reactStrictMode: true,
-  // keep this simple for now — no headers yet
+  // no headers for now—keep it minimal to confirm deploy
 };
 
-export default nextConfig;
+module.exports = nextConfig;
