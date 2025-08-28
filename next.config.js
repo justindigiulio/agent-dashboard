@@ -1,7 +1,3 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  // no headers for now—keep it minimal to confirm deploy
-};
-
+const nextConfig = { reactStrictMode: true };
 module.exports = nextConfig;
