@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+// app/layout.tsx
 import "./globals.css";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "DiGiulio Agent Dashboard",
-  description: "Docs search and tools for DiGiulio agents",
+  description: "Docs, tools, and listings for DiGiulio agents.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
