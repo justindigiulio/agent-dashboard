@@ -59,8 +59,12 @@ async function getAuthJWT() {
   return jwt;
 }
 
-function buildDriveQuery(raw: string, folderId?: string) {
-  // keep up to 5 normalized tokens
+/**
+ * Updated: search across EVERYTHING the service account can see,
+ * not just direct children of a single folder. This picks up items
+ * in subfolders too (since Drive can match fullText/name globally).
+ */
+function buildDriveQuery(raw: string, _folderId?: string) {
   const terms = raw
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
@@ -68,15 +72,15 @@ function buildDriveQuery(raw: string, folderId?: string) {
     .filter(Boolean)
     .slice(0, 5);
 
+  // Base: exclude folders & trashed
   let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-  if (folderId) q += ` and '${escapeQ(folderId)}' in parents`;
 
   if (terms.length) {
     const parts: string[] = [];
     for (const t of terms) {
-      // search in full text and file name
-      parts.push(`fullText contains '${escapeQ(t)}'`);
-      parts.push(`name contains '${escapeQ(t)}'`);
+      const e = escapeQ(t);
+      parts.push(`fullText contains '${e}'`);
+      parts.push(`name contains '${e}'`);
     }
     q += " and (" + parts.join(" or ") + ")";
   }
@@ -93,6 +97,8 @@ async function driveSearch(auth: any, query: string, limit = 6): Promise<GFile[]
     pageSize: limit,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
+    corpora: "user",
+    spaces: "drive",
   });
   return (data.files || []) as GFile[];
 }
@@ -219,7 +225,7 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: "MISSING_QUESTION" }), { status: 400 });
     }
 
-    // A) Search Drive
+    // A) Search Drive (now searches across subfolders too)
     const auth = await getAuthJWT();
     let files = await driveSearch(auth, question, 6);
 
