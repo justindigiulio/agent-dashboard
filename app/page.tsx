@@ -1,7 +1,7 @@
 // app/page.tsx
 import Image from "next/image";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../lib/auth";
+import { authOptions } from "../../lib/auth";
 
 // Brand palette (high-contrast but airy)
 const BRAND = {
