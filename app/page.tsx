@@ -1,6 +1,6 @@
 // app/chat/page.tsx
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../lib/auth";
+import { authOptions } from "../lib/auth";
 
 export const metadata = {
   title: "Agent Assistant • Chat",
