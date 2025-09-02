@@ -1,8 +1,8 @@
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import Providers from "./providers";               // <-- your SessionProvider wrapper
-import ChatWidget from "../components/ChatWidget"; // <-- the floating popup
+import Providers from "./providers";
+import ChatWidget from "../components/ChatWidget";
 
 export const metadata: Metadata = {
   title: "DiGiulio Agent Dashboard",
@@ -15,11 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           {children}
-          {/* Floating assistant, available on all signed-in pages */}
+          {/* Floating assistant on every page */}
           <ChatWidget />
         </Providers>
       </body>
     </html>
   );
 }
-
