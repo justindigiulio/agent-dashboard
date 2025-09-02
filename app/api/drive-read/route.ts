@@ -27,21 +27,20 @@ async function getAuthJWT() {
     scopes: [
       "https://www.googleapis.com/auth/drive.readonly",
       "https://www.googleapis.com/auth/documents.readonly",
-      "https://www.googleapis.com/auth/spreadsheets.readonly",
-    ],
+      "https://www.googleapis.com/auth/spreadsheets.readonly"
+    ]
   });
   await jwt.authorize();
   return jwt;
 }
 
-// ---- stream download helper (Node) ----
+// Stream download bytes from Drive -> Buffer
 async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
   const drive = google.drive({ version: "v3", auth });
   const res: any = await drive.files.get(
     { fileId, alt: "media", supportsAllDrives: true },
     { responseType: "stream" } as any
   );
-
   const chunks: Buffer[] = [];
   await new Promise<void>((resolve, reject) => {
     res.data.on("data", (d: Buffer) => chunks.push(d));
@@ -51,6 +50,25 @@ async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+async function extractPdfText(buf: Buffer): Promise<string> {
+  // Use the Node/legacy build to avoid web worker setup
+  const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.js");
+  const loadingTask = pdfjsLib.getDocument({ data: buf });
+  const doc = await loadingTask.promise;
+
+  const maxPages = Math.min(doc.numPages, 8); // cap for speed
+  let all = "";
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const line = (content.items || [])
+      .map((it: any) => (it?.str ?? it?.text ?? ""))
+      .join(" ");
+    all += line + "\n";
+  }
+  return all;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -58,18 +76,18 @@ export async function GET(req: Request) {
     if (!id) {
       return new Response(JSON.stringify({ error: "Missing ?id=" }, null, 2), {
         status: 400,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json" }
       });
     }
 
     const auth = await getAuthJWT();
     const drive = google.drive({ version: "v3", auth });
 
-    // Get metadata first
+    // Metadata
     const meta = await drive.files.get({
       fileId: id,
       fields: "id,name,mimeType,modifiedTime,size",
-      supportsAllDrives: true,
+      supportsAllDrives: true
     });
     const f = meta.data as {
       id?: string;
@@ -91,10 +109,7 @@ export async function GET(req: Request) {
       for (const el of body) {
         if (el.paragraph?.elements) {
           out.push(
-            el.paragraph.elements
-              .map((e: any) => e.textRun?.content || "")
-              .join("")
-              .trim()
+            el.paragraph.elements.map((e: any) => e.textRun?.content || "").join("").trim()
           );
         } else if (el.table?.tableRows) {
           for (const row of el.table.tableRows) {
@@ -119,7 +134,7 @@ export async function GET(req: Request) {
       const vals = await sheets.spreadsheets.values.get({
         spreadsheetId: id,
         range: `${tab}!A1:Z200`,
-        majorDimension: "ROWS",
+        majorDimension: "ROWS"
       });
       const rows = (vals.data.values || []) as string[][];
       text = rows.map((r) => r.join("\t")).join("\n");
@@ -128,11 +143,12 @@ export async function GET(req: Request) {
       if (!buf || buf.length === 0) {
         note = "Downloaded 0 bytes from Drive (permission or download issue).";
       } else {
-        const pdfParse = (await import("pdf-parse")).default as any;
-        const data = await pdfParse(buf);
-        text = String(data?.text || "");
-        if (!text.trim())
-          note = "PDF appears to have no extractable text (likely scanned/images).";
+        try {
+          text = await extractPdfText(buf);
+          if (!text.trim()) note = "No extractable text; likely a scanned/image-only PDF.";
+        } catch (e: any) {
+          note = "PDF parse failed: " + String(e?.message || e);
+        }
       }
     } else if (mime.includes("wordprocessingml.document")) {
       const buf = await fetchBinary(auth, id);
@@ -158,7 +174,7 @@ export async function GET(req: Request) {
           url: docUrl(id, f.mimeType || ""),
           textLength: (text || "").length,
           preview: limit(text),
-          note,
+          note
         },
         null,
         2
@@ -168,7 +184,7 @@ export async function GET(req: Request) {
   } catch (e: any) {
     return new Response(JSON.stringify({ error: String(e?.message || e) }, null, 2), {
       status: 500,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json" }
     });
   }
 }
