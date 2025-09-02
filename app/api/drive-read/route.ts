@@ -50,9 +50,20 @@ async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// Use pdfjs-dist (Node build). Try legacy path first, then modern path.
 async function extractPdfText(buf: Buffer): Promise<string> {
-  // Use the Node/legacy build to avoid web worker setup
-  const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.js");
+  let pdfjsLib: any;
+  try {
+    pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  } catch {
+    pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
+  }
+
+  // In Node we don't use a worker.
+  if (pdfjsLib.GlobalWorkerOptions) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = undefined as any;
+  }
+
   const loadingTask = pdfjsLib.getDocument({ data: buf });
   const doc = await loadingTask.promise;
 
@@ -108,9 +119,7 @@ export async function GET(req: Request) {
       const body = (data as any)?.body?.content || [];
       for (const el of body) {
         if (el.paragraph?.elements) {
-          out.push(
-            el.paragraph.elements.map((e: any) => e.textRun?.content || "").join("").trim()
-          );
+          out.push(el.paragraph.elements.map((e: any) => e.textRun?.content || "").join("").trim());
         } else if (el.table?.tableRows) {
           for (const row of el.table.tableRows) {
             const cells = row.tableCells?.map((c: any) =>
