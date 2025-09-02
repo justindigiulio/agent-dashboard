@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "googleapis": "^131.0.0",
+    "mammoth": "1.6.0",
     "next": "15.4.6",
     "next-auth": "^4.24.7",
+    "pdf-parse": "1.1.1",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -20,7 +22,9 @@
     "tailwindcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "typescript": "^5"
+    "@types/react-dom": "^19"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
