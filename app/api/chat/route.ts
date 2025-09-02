@@ -65,28 +65,28 @@ const STOPWORDS = new Set([
   "me","my","us","our","agreement","template","templates","form","forms","document","doc"
 ]);
 
-function buildDriveQuery(raw: string, _folderId?: string) {
-  // Normalize & tokenize
+function expandTerms(raw: string): string[] {
   const base = raw.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ");
   const initial = base.split(/\s+/).filter(Boolean);
+  const kept = initial.filter((t) => !STOPWORDS.has(t)).slice(0, 6);
 
-  // Drop filler words; keep up to 6 signals
-  const kept = initial.filter(t => !STOPWORDS.has(t)).slice(0, 6);
-
-  // Expand synonyms for better recall (sublease, lease, co-op)
   const expanded = new Set<string>(kept);
   for (const t of kept) {
     if (t.includes("sublease") || t.includes("sublet")) {
-      ["sublease","sublet","subletting","assignment","assign"].forEach(w => expanded.add(w));
+      ["sublease","sublet","subletting","assignment","assign"].forEach((w) => expanded.add(w));
     }
     if (t === "lease") {
-      ["lease","rider","addendum"].forEach(w => expanded.add(w));
+      ["lease","rider","addendum"].forEach((w) => expanded.add(w));
     }
     if (t === "co" || t === "coop" || t === "co-op") {
-      ["co-op","coop","board","package"].forEach(w => expanded.add(w));
+      ["co-op","coop","board","package"].forEach((w) => expanded.add(w));
     }
   }
-  const terms = Array.from(expanded);
+  return Array.from(expanded);
+}
+
+function buildDriveQuery(raw: string, _folderId?: string) {
+  const terms = expandTerms(raw);
 
   // Base: exclude folders & trash; search globally (not just parent)
   let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
@@ -100,12 +100,10 @@ function buildDriveQuery(raw: string, _folderId?: string) {
     }
     q += " and (" + parts.join(" or ") + ")";
   }
-
-  // NOTE: We do NOT restrict to a single parent; subfolders are covered by fullText/name across the account.
   return q;
 }
 
-async function driveSearch(auth: any, query: string, limit = 6): Promise<GFile[]> {
+async function driveSearch(auth: any, query: string, limit = 10): Promise<GFile[]> {
   const drive = google.drive({ version: "v3", auth });
   const q = buildDriveQuery(query, getFolderId());
   const { data } = await drive.files.list({
@@ -119,6 +117,24 @@ async function driveSearch(auth: any, query: string, limit = 6): Promise<GFile[]
     spaces: "drive",
   });
   return (data.files || []) as GFile[];
+}
+
+// Prefer filenames that match the key terms (e.g., “sublease”)
+function scoreFile(f: GFile, terms: string[]): number {
+  const name = (f.name || "").toLowerCase();
+  let s = 0;
+  for (const t of terms) {
+    if (!t) continue;
+    if (name.includes(t)) s += 3;
+    // light boost for PDFs for legal-ish docs
+    if (t.includes("lease") && (f.mimeType || "").includes("pdf")) s += 1;
+  }
+  return s;
+}
+
+function rankFiles(files: GFile[], rawQuery: string): GFile[] {
+  const terms = expandTerms(rawQuery);
+  return [...files].sort((a, b) => scoreFile(b, terms) - scoreFile(a, terms));
 }
 
 function flattenGoogleDoc(doc: any): string {
@@ -243,14 +259,15 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: "MISSING_QUESTION" }), { status: 400 });
     }
 
-    // A) Search Drive (global, includes subfolders)
+    // A) Search Drive globally (includes subfolders), then rank by filename relevance
     const auth = await getAuthJWT();
-    let files = await driveSearch(auth, question, 6);
+    let files = await driveSearch(auth, question, 12);
+    files = rankFiles(files, question).slice(0, 6);
 
     // If nothing found, try a shorter variant
     if (!files.length) {
-      const altQ = question.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
-      files = await driveSearch(auth, altQ, 6);
+      const altQ = expandTerms(question).slice(0, 3).join(" ");
+      files = rankFiles(await driveSearch(auth, altQ, 12), question).slice(0, 6);
     }
 
     // B) Pull text (Docs/Sheets); PDFs & binaries will be link-only
@@ -262,11 +279,26 @@ export async function POST(req: Request) {
       sources.push({ id: f.id, name: f.name, url: docUrl(f), mimeType: f.mimeType, snippet: txt?.slice(0, 300) });
     }
 
-    // C) Build prompt & ask OpenAI
+    // C) If we have NO inline text at all, return a helpful link-forward answer (skip OpenAI)
+    const anyText = blobs.some((b) => b && b.trim().length > 40);
+    if (!anyText && sources.length) {
+      const list = sources
+        .map((s) => `- [${s.name}](${s.url})`)
+        .join("\n");
+      const answer =
+        `I can't read the body text of these files (they’re PDFs or uploads), ` +
+        `but here are your top matches to open right away:\n\n${list}\n\n` +
+        `Tip: if you want me to summarize the content, upload a Google Doc version or paste the text.`;
+      return new Response(JSON.stringify({ answer, sources }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // D) Otherwise, build prompt & ask OpenAI
     const prompt = buildPrompt(question, sources, blobs);
     const answer = await callOpenAI(prompt);
 
-    // D) Return answer + sources
+    // E) Return answer + sources
     return new Response(JSON.stringify({ answer, sources }), {
       headers: { "content-type": "application/json" },
     });
