@@ -1,6 +1,8 @@
 // app/chat/page.tsx
+// top of app/chat/page.tsx
 import { getServerSession } from "next-auth";
-import { authOptions } from "../lib/auth"; // adjust if your path is /lib/auth
+import { authOptions } from "../../lib/auth"; //
+
 
 export default async function ChatPage() {
   const session = await getServerSession(authOptions);
