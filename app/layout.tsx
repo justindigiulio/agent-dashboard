@@ -15,7 +15,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           {children}
-          {/* Floating assistant on every page */}
           <ChatWidget />
         </Providers>
       </body>
