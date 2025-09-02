@@ -1,7 +1,7 @@
+// app/page.tsx
 import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../lib/auth";
-import DashboardClient from "../components/DashboardClient";
 
 // Brand palette (high-contrast but airy)
 const BRAND = {
@@ -9,6 +9,11 @@ const BRAND = {
   gold:  "#C39A24",        // rich gold
   goldSoftBg: "rgba(195,154,36,0.12)",
   greenSoftBg: "rgba(11,42,30,0.06)",
+};
+
+export const metadata = {
+  title: "DiGiulio Agent Dashboard",
+  description: "Internal tools for DiGiulio Group agents",
 };
 
 async function getLandlordCount() {
@@ -49,7 +54,6 @@ export default async function Home() {
                 width={300}
                 height={72}
                 priority
-                // subtle shadow so gold-on-white pops
                 style={{
                   filter:
                     "drop-shadow(0 0.5px 0 #ffffff) drop-shadow(0 3px 10px rgba(0,0,0,.18))",
@@ -118,6 +122,9 @@ export default async function Home() {
             </a>
             <a href="/listings/landlord" className="hover:opacity-80" style={{ color: BRAND.green }}>
               Landlord Inbox
+            </a>
+            <a href="/chat" className="hover:opacity-80" style={{ color: BRAND.green }}>
+              Chat
             </a>
             <a href="#roadmap" className="hover:opacity-80" style={{ color: BRAND.green }}>
               Roadmap
@@ -189,7 +196,7 @@ export default async function Home() {
             </div>
           </a>
 
-          {/* Docs & Guidance */}
+          {/* Docs & Guidance (placeholder for now) */}
           <a
             href="#docs"
             className="group rounded-2xl border bg-white p-6 transition-shadow hover:shadow-lg"
@@ -248,7 +255,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Docs search */}
+      {/* Docs search section (placeholder; DashboardClient disabled for stability) */}
       <section id="docs" className="mx-auto max-w-6xl px-4 pb-14">
         <div
           className="rounded-2xl border bg-white p-6"
@@ -257,11 +264,19 @@ export default async function Home() {
           <h2 className="mb-2 text-xl font-semibold" style={{ color: BRAND.green }}>
             Docs & Guidance
           </h2>
-          <p className="mb-4 text-sm text-gray-700">
-            Search your shared Drive folder. Try terms like <em>lease</em>,{" "}
-            <em>rider</em>, or <em>co-op board</em>.
+          <p className="mb-3 text-sm text-gray-700">
+            The Drive search widget is temporarily disabled while we diagnose an error.
           </p>
-          <DashboardClient email={session.user.email!} />
+          <a
+            href="/chat"
+            className="inline-block rounded-xl px-4 py-2 text-sm font-medium text-white"
+            style={{ background: BRAND.green }}
+          >
+            Open Agent Chat (beta)
+          </a>
+          {/* When stable, restore:
+              <DashboardClient email={session.user.email!} />
+          */}
         </div>
       </section>
     </>
