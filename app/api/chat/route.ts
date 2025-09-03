@@ -18,25 +18,45 @@ function getFolderId(): string | undefined {
     undefined
   );
 }
-
-function docUrl(file: GFile): string {
-  const mt = file.mimeType || "";
-  if (mt.includes("application/vnd.google-apps.document")) {
-    return `https://docs.google.com/document/d/${file.id}/edit`;
-  }
-  if (mt.includes("application/vnd.google-apps.spreadsheet")) {
-    return `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-  }
-  if (mt.includes("application/vnd.google-apps.presentation")) {
-    return `https://docs.google.com/presentation/d/${file.id}/edit`;
-  }
-  return `https://drive.google.com/file/d/${file.id}/view`;
-}
-
 function escapeQ(s: string) {
   return s.replace(/'/g, "\\'");
 }
+function docUrl(file: GFile): string {
+  const mt = file.mimeType || "";
+  if (mt.includes("application/vnd.google-apps.document"))
+    return `https://docs.google.com/document/d/${file.id}/edit`;
+  if (mt.includes("application/vnd.google-apps.spreadsheet"))
+    return `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+  if (mt.includes("application/vnd.google-apps.presentation"))
+    return `https://docs.google.com/presentation/d/${file.id}/edit`;
+  return `https://drive.google.com/file/d/${file.id}/view`;
+}
+function buildDriveQuery(raw: string, folderId?: string) {
+  const terms = raw
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5);
 
+  let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+  if (folderId) q += ` and '${escapeQ(folderId)}' in parents`;
+
+  if (terms.length) {
+    const parts: string[] = [];
+    for (const t of terms) {
+      parts.push(`fullText contains '${escapeQ(t)}'`);
+      parts.push(`name contains '${escapeQ(t)}'`);
+    }
+    q += " and (" + parts.join(" or ") + ")";
+  }
+  return q;
+}
+function limit(text: string, n = 15000) {
+  return (text || "").replace(/\u0000/g, "").slice(0, n);
+}
+
+// ---------- Google Auth ----------
 async function getAuthJWT() {
   const svc = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!svc) throw new Error("ENV_MISSING:GOOGLE_SERVICE_ACCOUNT_JSON");
@@ -59,84 +79,22 @@ async function getAuthJWT() {
   return jwt;
 }
 
-// ---------- Smarter query (stopwords + synonyms) ----------
-const STOPWORDS = new Set([
-  "i","need","a","an","the","to","for","please","help","with","about","on","of","in","and","or",
-  "me","my","us","our","agreement","template","templates","form","forms","document","doc"
-]);
-
-function expandTerms(raw: string): string[] {
-  const base = raw.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ");
-  const initial = base.split(/\s+/).filter(Boolean);
-  const kept = initial.filter((t) => !STOPWORDS.has(t)).slice(0, 6);
-
-  const expanded = new Set<string>(kept);
-  for (const t of kept) {
-    if (t.includes("sublease") || t.includes("sublet")) {
-      ["sublease","sublet","subletting","assignment","assign"].forEach((w) => expanded.add(w));
-    }
-    if (t === "lease") {
-      ["lease","rider","addendum"].forEach((w) => expanded.add(w));
-    }
-    if (t === "co" || t === "coop" || t === "co-op") {
-      ["co-op","coop","board","package"].forEach((w) => expanded.add(w));
-    }
-  }
-  return Array.from(expanded);
-}
-
-function buildDriveQuery(raw: string, _folderId?: string) {
-  const terms = expandTerms(raw);
-
-  // Base: exclude folders & trash; search globally (not just parent)
-  let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-
-  if (terms.length) {
-    const parts: string[] = [];
-    for (const t of terms) {
-      const e = escapeQ(t);
-      parts.push(`name contains '${e}'`);
-      parts.push(`fullText contains '${e}'`);
-    }
-    q += " and (" + parts.join(" or ") + ")";
-  }
-  return q;
-}
-
-async function driveSearch(auth: any, query: string, limit = 10): Promise<GFile[]> {
+// ---------- Drive search ----------
+async function driveSearch(auth: any, query: string, limitN = 6): Promise<GFile[]> {
   const drive = google.drive({ version: "v3", auth });
   const q = buildDriveQuery(query, getFolderId());
   const { data } = await drive.files.list({
     q,
     fields: "files(id,name,mimeType,modifiedTime)",
     orderBy: "modifiedTime desc",
-    pageSize: limit,
+    pageSize: limitN,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
-    corpora: "user",
-    spaces: "drive",
   });
   return (data.files || []) as GFile[];
 }
 
-// Prefer filenames that match the key terms (e.g., “sublease”)
-function scoreFile(f: GFile, terms: string[]): number {
-  const name = (f.name || "").toLowerCase();
-  let s = 0;
-  for (const t of terms) {
-    if (!t) continue;
-    if (name.includes(t)) s += 3;
-    // light boost for PDFs for legal-ish docs
-    if (t.includes("lease") && (f.mimeType || "").includes("pdf")) s += 1;
-  }
-  return s;
-}
-
-function rankFiles(files: GFile[], rawQuery: string): GFile[] {
-  const terms = expandTerms(rawQuery);
-  return [...files].sort((a, b) => scoreFile(b, terms) - scoreFile(a, terms));
-}
-
+// ---------- Text extractors ----------
 function flattenGoogleDoc(doc: any): string {
   const out: string[] = [];
   const body = doc?.body?.content || [];
@@ -160,36 +118,102 @@ function flattenGoogleDoc(doc: any): string {
       }
     }
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 15000);
+  return limit(out.join("\n").replace(/\n{3,}/g, "\n\n"));
+}
+
+async function fetchBinaryBuffer(auth: any, fileId: string): Promise<Buffer> {
+  const drive = google.drive({ version: "v3", auth });
+  const res: any = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "stream" } as any
+  );
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    res.data.on("data", (d: Buffer) => chunks.push(d));
+    res.data.on("end", () => resolve());
+    res.data.on("error", reject);
+  });
+  return Buffer.concat(chunks);
+}
+async function fetchBinaryBytes(auth: any, fileId: string): Promise<Uint8Array> {
+  const buf = await fetchBinaryBuffer(auth, fileId);
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+async function extractPdfText(bytes: Uint8Array): Promise<string> {
+  let pdfjsLib: any;
+  try {
+    pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    try { await import("pdfjs-dist/legacy/build/pdf.worker.mjs"); } catch {}
+  } catch {
+    pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
+    try { await import("pdfjs-dist/build/pdf.worker.mjs"); } catch {}
+  }
+  const loadingTask = pdfjsLib.getDocument({
+    data: bytes,
+    disableWorker: true,
+    isEvalSupported: false,
+  });
+  const doc = await loadingTask.promise;
+  const maxPages = Math.min(doc.numPages, 8);
+  let all = "";
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const line = (content.items || [])
+      .map((it: any) => (it?.str ?? it?.text ?? ""))
+      .join(" ");
+    all += line + "\n";
+  }
+  return limit(all);
 }
 
 async function fetchFileText(auth: any, file: GFile): Promise<string> {
-  try {
-    const mt = file.mimeType || "";
-    if (mt.includes("application/vnd.google-apps.document")) {
-      const docs = google.docs({ version: "v1", auth });
-      const { data } = await docs.documents.get({ documentId: file.id });
-      return flattenGoogleDoc(data);
-    }
-    if (mt.includes("application/vnd.google-apps.spreadsheet")) {
-      const sheets = google.sheets({ version: "v4", auth });
-      const meta = await sheets.spreadsheets.get({ spreadsheetId: file.id });
-      const tab = meta.data.sheets?.[0]?.properties?.title || "Sheet1";
-      const vals = await sheets.spreadsheets.values.get({
-        spreadsheetId: file.id,
-        range: `${tab}!A1:Z200`,
-        majorDimension: "ROWS",
-      });
-      const rows = (vals.data.values || []) as string[][];
-      return rows.map((r) => r.join("\t")).join("\n").slice(0, 15000);
-    }
-    // PDFs & other binaries: skip text extraction (we'll still cite by title)
-    return "";
-  } catch {
-    return "";
+  const mt = (file.mimeType || "").toLowerCase();
+
+  if (mt.includes("application/vnd.google-apps.document")) {
+    const docs = google.docs({ version: "v1", auth });
+    const { data } = await docs.documents.get({ documentId: file.id });
+    return flattenGoogleDoc(data);
   }
+
+  if (mt.includes("application/vnd.google-apps.spreadsheet")) {
+    const sheets = google.sheets({ version: "v4", auth });
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: file.id });
+    const tab = meta.data.sheets?.[0]?.properties?.title || "Sheet1";
+    const vals = await sheets.spreadsheets.values.get({
+      spreadsheetId: file.id,
+      range: `${tab}!A1:Z200`,
+      majorDimension: "ROWS",
+    });
+    const rows = (vals.data.values || []) as string[][];
+    return limit(rows.map((r) => r.join("\t")).join("\n"));
+  }
+
+  if (mt.includes("pdf")) {
+    const bytes = await fetchBinaryBytes(auth, file.id);
+    if (!bytes.byteLength) return "";
+    try {
+      const text = await extractPdfText(bytes);
+      return limit(text);
+    } catch {
+      return "";
+    }
+  }
+
+  if (mt.includes("wordprocessingml.document")) {
+    // .docx
+    const buf = await fetchBinaryBuffer(auth, file.id);
+    if (!buf?.length) return "";
+    const mammoth = await import("mammoth");
+    const result = await mammoth.extractRawText({ buffer: buf });
+    return limit(String(result?.value || ""));
+  }
+
+  // Other binaries (images/video/etc.): no inline text
+  return "";
 }
 
+// ---------- Prompt + OpenAI ----------
 function buildPrompt(question: string, sources: Source[], blobs: string[]): string {
   const joined = sources
     .map((s, i) => {
@@ -203,18 +227,16 @@ function buildPrompt(question: string, sources: Source[], blobs: string[]): stri
 
   return `You are the DiGiulio Group Agent Assistant.
 
-Use ONLY the information from the provided SOURCES to answer the question. 
-If the exact answer is not present in the source text, say you don't have enough info and explicitly point the agent to the most relevant source link by name. 
+Use ONLY the information from the provided SOURCES to answer the question.
+If the exact answer is not present in the source text, say you don't have enough info and point the agent to the most relevant source link by name.
 Never invent policy text or legal language.
-
-Answer briefly (2–6 sentences max) and include a "Sources" list with markdown links to the items you used.
+Answer briefly (2–6 sentences) and include a "Sources" list with markdown links to the items you used.
 
 QUESTION:
 ${question}
 
 SOURCES:
-${joined}
-`;
+${joined}`;
 }
 
 async function callOpenAI(prompt: string): Promise<string> {
@@ -259,55 +281,36 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: "MISSING_QUESTION" }), { status: 400 });
     }
 
-    // A) Search Drive globally (includes subfolders), then rank by filename relevance
     const auth = await getAuthJWT();
-    let files = await driveSearch(auth, question, 12);
-    files = rankFiles(files, question).slice(0, 6);
-
-    // If nothing found, try a shorter variant
+    let files = await driveSearch(auth, question, 6);
     if (!files.length) {
-      const altQ = expandTerms(question).slice(0, 3).join(" ");
-      files = rankFiles(await driveSearch(auth, altQ, 12), question).slice(0, 6);
+      const altQ = question.split(/\s+/).slice(0, 3).join(" ");
+      files = await driveSearch(auth, altQ, 6);
     }
 
-    // B) Pull text (Docs/Sheets); PDFs & binaries will be link-only
     const blobs: string[] = [];
     const sources: Source[] = [];
     for (const f of files) {
       const txt = await fetchFileText(auth, f).catch(() => "");
       blobs.push(txt);
-      sources.push({ id: f.id, name: f.name, url: docUrl(f), mimeType: f.mimeType, snippet: txt?.slice(0, 300) });
-    }
-
-    // C) If we have NO inline text at all, return a helpful link-forward answer (skip OpenAI)
-    const anyText = blobs.some((b) => b && b.trim().length > 40);
-    if (!anyText && sources.length) {
-      const list = sources
-        .map((s) => `- [${s.name}](${s.url})`)
-        .join("\n");
-      const answer =
-        `I can't read the body text of these files (they’re PDFs or uploads), ` +
-        `but here are your top matches to open right away:\n\n${list}\n\n` +
-        `Tip: if you want me to summarize the content, upload a Google Doc version or paste the text.`;
-      return new Response(JSON.stringify({ answer, sources }), {
-        headers: { "content-type": "application/json" },
+      sources.push({
+        id: f.id,
+        name: f.name,
+        url: docUrl(f),
+        mimeType: f.mimeType,
+        snippet: txt?.slice(0, 300),
       });
     }
 
-    // D) Otherwise, build prompt & ask OpenAI
     const prompt = buildPrompt(question, sources, blobs);
     const answer = await callOpenAI(prompt);
 
-    // E) Return answer + sources
     return new Response(JSON.stringify({ answer, sources }), {
       headers: { "content-type": "application/json" },
     });
   } catch (err: any) {
     return new Response(
-      JSON.stringify({
-        error: "CHAT_FAILED",
-        detail: String(err?.message || err),
-      }),
+      JSON.stringify({ error: "CHAT_FAILED", detail: String(err?.message || err) }),
       { status: 500, headers: { "content-type": "application/json" } }
     );
   }
