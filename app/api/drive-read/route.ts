@@ -50,7 +50,7 @@ async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-// Use pdfjs-dist (Node build). Try legacy path first, then modern path.
+// PDF text extraction using pdfjs-dist in Node (no worker)
 async function extractPdfText(buf: Buffer): Promise<string> {
   let pdfjsLib: any;
   try {
@@ -59,10 +59,7 @@ async function extractPdfText(buf: Buffer): Promise<string> {
     pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
   }
 
-  // In Node we don't use a worker.
-  if (pdfjsLib.GlobalWorkerOptions) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = undefined as any;
-  }
+  // Do NOT set GlobalWorkerOptions.workerSrc in Node.
 
   const loadingTask = pdfjsLib.getDocument({ data: buf });
   const doc = await loadingTask.promise;
