@@ -27,16 +27,14 @@ async function getAuthJWT() {
     scopes: [
       "https://www.googleapis.com/auth/drive.readonly",
       "https://www.googleapis.com/auth/documents.readonly",
-      "https://www.googleapis.com/auth/spreadsheets.readonly"
-    ]
+      "https://www.googleapis.com/auth/spreadsheets.readonly",
+    ],
   });
   await jwt.authorize();
   return jwt;
 }
 
-// ---- Download helpers ----
-
-// Stream from Drive -> Buffer
+// Stream download bytes from Drive -> Buffer
 async function fetchBinaryBuffer(auth: any, fileId: string): Promise<Buffer> {
   const drive = google.drive({ version: "v3", auth });
   const res: any = await drive.files.get(
@@ -59,8 +57,6 @@ async function fetchBinaryBytes(auth: any, fileId: string): Promise<Uint8Array> 
 }
 
 // ---- Extractors ----
-
-// PDF text extraction using pdfjs-dist in Node (no worker)
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
   let pdfjsLib: any;
   try {
@@ -69,10 +65,15 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
     pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
   }
 
-  const loadingTask = pdfjsLib.getDocument({ data: bytes });
+  // IMPORTANT: run without a worker in serverless
+  const loadingTask = pdfjsLib.getDocument({
+    data: bytes,
+    disableWorker: true,
+    isEvalSupported: false, // safer in server envs
+  });
   const doc = await loadingTask.promise;
 
-  const maxPages = Math.min(doc.numPages, 8); // cap for speed
+  const maxPages = Math.min(doc.numPages, 8);
   let all = "";
   for (let i = 1; i <= maxPages; i++) {
     const page = await doc.getPage(i);
@@ -92,7 +93,7 @@ export async function GET(req: Request) {
     if (!id) {
       return new Response(JSON.stringify({ error: "Missing ?id=" }, null, 2), {
         status: 400,
-        headers: { "content-type": "application/json" }
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -103,7 +104,7 @@ export async function GET(req: Request) {
     const meta = await drive.files.get({
       fileId: id,
       fields: "id,name,mimeType,modifiedTime,size",
-      supportsAllDrives: true
+      supportsAllDrives: true,
     });
     const f = meta.data as {
       id?: string;
@@ -148,7 +149,7 @@ export async function GET(req: Request) {
       const vals = await sheets.spreadsheets.values.get({
         spreadsheetId: id,
         range: `${tab}!A1:Z200`,
-        majorDimension: "ROWS"
+        majorDimension: "ROWS",
       });
       const rows = (vals.data.values || []) as string[][];
       text = rows.map((r) => r.join("\t")).join("\n");
@@ -188,7 +189,7 @@ export async function GET(req: Request) {
           url: docUrl(id, f.mimeType || ""),
           textLength: (text || "").length,
           preview: limit(text),
-          note
+          note,
         },
         null,
         2
@@ -198,7 +199,7 @@ export async function GET(req: Request) {
   } catch (e: any) {
     return new Response(JSON.stringify({ error: String(e?.message || e) }, null, 2), {
       status: 500,
-      headers: { "content-type": "application/json" }
+      headers: { "content-type": "application/json" },
     });
   }
 }
