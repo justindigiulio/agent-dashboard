@@ -4,6 +4,7 @@ import { google } from "googleapis";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// ---------- helpers ----------
 function limit(text: string, n = 1500) {
   return (text || "").replace(/\u0000/g, "").slice(0, n);
 }
@@ -34,7 +35,7 @@ async function getAuthJWT() {
   return jwt;
 }
 
-// Stream download bytes from Drive -> Buffer
+// ---------- download ----------
 async function fetchBinaryBuffer(auth: any, fileId: string): Promise<Buffer> {
   const drive = google.drive({ version: "v3", auth });
   const res: any = await drive.files.get(
@@ -56,24 +57,27 @@ async function fetchBinaryBytes(auth: any, fileId: string): Promise<Uint8Array> 
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 }
 
-// ---- Extractors ----
+// ---------- extractors ----------
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
   let pdfjsLib: any;
+
+  // Prefer legacy build; pre-import the worker so Next bundles it
   try {
     pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    try { await import("pdfjs-dist/legacy/build/pdf.worker.mjs"); } catch {}
   } catch {
     pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
+    try { await import("pdfjs-dist/build/pdf.worker.mjs"); } catch {}
   }
 
-  // IMPORTANT: run without a worker in serverless
   const loadingTask = pdfjsLib.getDocument({
     data: bytes,
-    disableWorker: true,
+    disableWorker: true,    // important in serverless
     isEvalSupported: false, // safer in server envs
   });
   const doc = await loadingTask.promise;
 
-  const maxPages = Math.min(doc.numPages, 8);
+  const maxPages = Math.min(doc.numPages, 8); // cap for speed
   let all = "";
   for (let i = 1; i <= maxPages; i++) {
     const page = await doc.getPage(i);
@@ -86,6 +90,7 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
   return all;
 }
 
+// ---------- route ----------
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -125,7 +130,9 @@ export async function GET(req: Request) {
       const body = (data as any)?.body?.content || [];
       for (const el of body) {
         if (el.paragraph?.elements) {
-          out.push(el.paragraph.elements.map((e: any) => e.textRun?.content || "").join("").trim());
+          out.push(
+            el.paragraph.elements.map((e: any) => e.textRun?.content || "").join("").trim()
+          );
         } else if (el.table?.tableRows) {
           for (const row of el.table.tableRows) {
             const cells = row.tableCells?.map((c: any) =>
