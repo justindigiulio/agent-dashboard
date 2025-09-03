@@ -34,8 +34,10 @@ async function getAuthJWT() {
   return jwt;
 }
 
-// Stream download bytes from Drive -> Buffer
-async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
+// ---- Download helpers ----
+
+// Stream from Drive -> Buffer
+async function fetchBinaryBuffer(auth: any, fileId: string): Promise<Buffer> {
   const drive = google.drive({ version: "v3", auth });
   const res: any = await drive.files.get(
     { fileId, alt: "media", supportsAllDrives: true },
@@ -50,8 +52,16 @@ async function fetchBinary(auth: any, fileId: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// Buffer -> Uint8Array for pdfjs
+async function fetchBinaryBytes(auth: any, fileId: string): Promise<Uint8Array> {
+  const buf = await fetchBinaryBuffer(auth, fileId);
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+
+// ---- Extractors ----
+
 // PDF text extraction using pdfjs-dist in Node (no worker)
-async function extractPdfText(buf: Buffer): Promise<string> {
+async function extractPdfText(bytes: Uint8Array): Promise<string> {
   let pdfjsLib: any;
   try {
     pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -59,9 +69,7 @@ async function extractPdfText(buf: Buffer): Promise<string> {
     pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
   }
 
-  // Do NOT set GlobalWorkerOptions.workerSrc in Node.
-
-  const loadingTask = pdfjsLib.getDocument({ data: buf });
+  const loadingTask = pdfjsLib.getDocument({ data: bytes });
   const doc = await loadingTask.promise;
 
   const maxPages = Math.min(doc.numPages, 8); // cap for speed
@@ -145,19 +153,19 @@ export async function GET(req: Request) {
       const rows = (vals.data.values || []) as string[][];
       text = rows.map((r) => r.join("\t")).join("\n");
     } else if (mime.includes("pdf")) {
-      const buf = await fetchBinary(auth, id);
-      if (!buf || buf.length === 0) {
+      const bytes = await fetchBinaryBytes(auth, id);
+      if (!bytes || bytes.byteLength === 0) {
         note = "Downloaded 0 bytes from Drive (permission or download issue).";
       } else {
         try {
-          text = await extractPdfText(buf);
+          text = await extractPdfText(bytes);
           if (!text.trim()) note = "No extractable text; likely a scanned/image-only PDF.";
         } catch (e: any) {
           note = "PDF parse failed: " + String(e?.message || e);
         }
       }
     } else if (mime.includes("wordprocessingml.document")) {
-      const buf = await fetchBinary(auth, id);
+      const buf = await fetchBinaryBuffer(auth, id);
       if (!buf || buf.length === 0) {
         note = "Downloaded 0 bytes from Drive (permission or download issue).";
       } else {
