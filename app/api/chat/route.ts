@@ -22,7 +22,7 @@ function escapeQ(s: string) {
   return s.replace(/'/g, "\\'");
 }
 function docUrl(file: GFile): string {
-  const mt = file.mimeType || "";
+  const mt = (file.mimeType || "").toLowerCase();
   if (mt.includes("application/vnd.google-apps.document"))
     return `https://docs.google.com/document/d/${file.id}/edit`;
   if (mt.includes("application/vnd.google-apps.spreadsheet"))
@@ -30,27 +30,6 @@ function docUrl(file: GFile): string {
   if (mt.includes("application/vnd.google-apps.presentation"))
     return `https://docs.google.com/presentation/d/${file.id}/edit`;
   return `https://drive.google.com/file/d/${file.id}/view`;
-}
-function buildDriveQuery(raw: string, folderId?: string) {
-  const terms = raw
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
-
-  let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-  if (folderId) q += ` and '${escapeQ(folderId)}' in parents`;
-
-  if (terms.length) {
-    const parts: string[] = [];
-    for (const t of terms) {
-      parts.push(`fullText contains '${escapeQ(t)}'`);
-      parts.push(`name contains '${escapeQ(t)}'`);
-    }
-    q += " and (" + parts.join(" or ") + ")";
-  }
-  return q;
 }
 function limit(text: string, n = 15000) {
   return (text || "").replace(/\u0000/g, "").slice(0, n);
@@ -60,12 +39,7 @@ function limit(text: string, n = 15000) {
 async function getAuthJWT() {
   const svc = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!svc) throw new Error("ENV_MISSING:GOOGLE_SERVICE_ACCOUNT_JSON");
-  let creds: any;
-  try {
-    creds = JSON.parse(svc);
-  } catch {
-    throw new Error("SERVICE_JSON_PARSE_FAILED");
-  }
+  const creds = JSON.parse(svc);
   const jwt = new google.auth.JWT({
     email: creds.client_email,
     key: (creds.private_key || "").replace(/\\n/g, "\n"),
@@ -79,19 +53,122 @@ async function getAuthJWT() {
   return jwt;
 }
 
-// ---------- Drive search ----------
-async function driveSearch(auth: any, query: string, limitN = 6): Promise<GFile[]> {
+// ---------- Search (name-first + synonyms + fallback) ----------
+function tokenize(raw: string) {
+  return raw
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function addSynonyms(terms: string[]) {
+  const set = new Set(terms);
+  if (terms.some(t => t.includes("sublease") || t.includes("sublet"))) {
+    set.add("sublease");
+    set.add("sublet");
+    set.add("assignment");
+    set.add("rider");
+  }
+  if (terms.some(t => t.includes("lease"))) {
+    set.add("lease");
+    set.add("rider");
+    set.add("addendum");
+  }
+  return Array.from(set);
+}
+
+function buildQuery({ terms, folderId, mode }:{
+  terms: string[];
+  folderId?: string;
+  mode: "name-first" | "fulltext";
+}) {
+  let q = `trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+  if (folderId) q += ` and '${escapeQ(folderId)}' in parents`;
+
+  const parts: string[] = [];
+  for (const t of terms) {
+    const e = escapeQ(t);
+    if (mode === "name-first") {
+      parts.push(`name contains '${e}'`);
+    } else {
+      parts.push(`fullText contains '${e}'`);
+      parts.push(`name contains '${e}'`);
+    }
+  }
+  if (parts.length) q += " and (" + parts.join(" or ") + ")";
+  return q;
+}
+
+function scoreFile(f: GFile, terms: string[]) {
+  const nm = (f.name || "").toLowerCase();
+  let s = 0;
+  for (const t of terms) {
+    if (nm === t || nm === `${t}.pdf` || nm === `${t}.docx`) s += 12;
+    if (nm.includes(t)) s += 8;
+    if (nm.startsWith(t)) s += 2;
+  }
+  const mt = (f.mimeType || "").toLowerCase();
+  if (mt.includes("pdf") || mt.includes("document")) s += 2; // prefer PDFs/Docs for forms
+  // recency nudge
+  const m = f.modifiedTime ? Date.parse(f.modifiedTime) : 0;
+  if (m) s += Math.min(5, Math.floor((Date.now() - m) / (1000*60*60*24*365)) * -1); // newer ~ higher
+  return s;
+}
+
+async function listFiles(auth: any, q: string, pageSize = 12): Promise<GFile[]> {
   const drive = google.drive({ version: "v3", auth });
-  const q = buildDriveQuery(query, getFolderId());
   const { data } = await drive.files.list({
     q,
     fields: "files(id,name,mimeType,modifiedTime)",
     orderBy: "modifiedTime desc",
-    pageSize: limitN,
+    pageSize,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
   });
   return (data.files || []) as GFile[];
+}
+
+async function driveSearchSmart(auth: any, query: string): Promise<GFile[]> {
+  const rawTerms = tokenize(query);
+  const terms = addSynonyms(rawTerms);
+  const folderId = getFolderId();
+
+  // 1) folder-scoped, name-first
+  const q1 = buildQuery({ terms, folderId, mode: "name-first" });
+  let files = await listFiles(auth, q1, 15);
+
+  // 2) if nothing obvious, folder-scoped fulltext+name
+  if (!files.length) {
+    const q2 = buildQuery({ terms, folderId, mode: "fulltext" });
+    files = await listFiles(auth, q2, 15);
+  }
+
+  // 3) if still weak (no filename matches), broaden to global (no folder)
+  const hasFileNameHit = files.some(f => {
+    const nm = (f.name || "").toLowerCase();
+    return terms.some(t => nm.includes(t));
+  });
+  if (!hasFileNameHit) {
+    const q3 = buildQuery({ terms, folderId: undefined, mode: "name-first" });
+    const global = await listFiles(auth, q3, 15);
+    // merge & de-dupe
+    const seen = new Set(files.map(f => f.id));
+    for (const g of global) if (!seen.has(g.id)) files.push(g);
+  }
+
+  // rank: filename relevance first, then recency
+  files.sort((a, b) => {
+    const sa = scoreFile(a, terms);
+    const sb = scoreFile(b, terms);
+    if (sb !== sa) return sb - sa;
+    const ma = a.modifiedTime ? Date.parse(a.modifiedTime) : 0;
+    const mb = b.modifiedTime ? Date.parse(b.modifiedTime) : 0;
+    return mb - ma;
+  });
+
+  return files.slice(0, 8);
 }
 
 // ---------- Text extractors ----------
@@ -201,7 +278,6 @@ async function fetchFileText(auth: any, file: GFile): Promise<string> {
   }
 
   if (mt.includes("wordprocessingml.document")) {
-    // .docx
     const buf = await fetchBinaryBuffer(auth, file.id);
     if (!buf?.length) return "";
     const mammoth = await import("mammoth");
@@ -209,7 +285,6 @@ async function fetchFileText(auth: any, file: GFile): Promise<string> {
     return limit(String(result?.value || ""));
   }
 
-  // Other binaries (images/video/etc.): no inline text
   return "";
 }
 
@@ -282,11 +357,7 @@ export async function POST(req: Request) {
     }
 
     const auth = await getAuthJWT();
-    let files = await driveSearch(auth, question, 6);
-    if (!files.length) {
-      const altQ = question.split(/\s+/).slice(0, 3).join(" ");
-      files = await driveSearch(auth, altQ, 6);
-    }
+    const files = await driveSearchSmart(auth, question);
 
     const blobs: string[] = [];
     const sources: Source[] = [];
