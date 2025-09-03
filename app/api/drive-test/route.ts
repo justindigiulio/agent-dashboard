@@ -43,12 +43,7 @@ async function getAuthJWT() {
 }
 
 function tokens(q: string) {
-  return q
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
+  return q.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean).slice(0, 5);
 }
 function nameQuery(parts: string[]) {
   if (!parts.length) return "";
@@ -58,27 +53,27 @@ function nameQuery(parts: string[]) {
 async function listFiles(
   auth: any,
   q: string,
-  opts?: { pageSize?: number; corpora?: "user" | "allDrives"; where?: string }
+  where: string,
+  pageSize = 25
 ) {
   const drive = google.drive({ version: "v3", auth });
   const { data } = await drive.files.list({
     q,
-    fields: "files(id,name,mimeType,modifiedTime,owners,driveId)",
+    fields: "files(id,name,mimeType,modifiedTime)",
     orderBy: "modifiedTime desc",
-    pageSize: opts?.pageSize ?? 25,
+    pageSize,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
-    corpora: opts?.corpora ?? "allDrives",
+    corpora: "allDrives",
     spaces: "drive",
   });
-
   return (data.files || []).map((f) => ({
     id: f.id!,
     name: f.name!,
     mimeType: f.mimeType!,
     modifiedTime: f.modifiedTime || null,
     url: docUrl(f.id!, f.mimeType!),
-    where: opts?.where || "unknown",
+    where,
   }));
 }
 
@@ -91,6 +86,8 @@ export async function GET(req: Request) {
     const nameOnly = nameQuery(parts);
     const folderId = getFolderId();
 
+    const auth = await getAuthJWT();
+
     const buckets: Record<string, any[]> = {
       inFolder: [],
       sharedWithMe: [],
@@ -102,11 +99,7 @@ export async function GET(req: Request) {
       const q1 =
         `trashed = false and '${escapeQ(folderId)}' in parents` +
         (nameOnly ? ` and ${nameOnly}` : "");
-      buckets.inFolder = await listFiles(req, q1, {
-        pageSize: limit,
-        corpora: "allDrives",
-        where: "inFolder",
-      } as any);
+      buckets.inFolder = await listFiles(auth, q1, "inFolder", limit);
     }
 
     // 2) Shared-with-me (name-first)
@@ -114,22 +107,13 @@ export async function GET(req: Request) {
       const q2 =
         `trashed = false and sharedWithMe = true` +
         (nameOnly ? ` and ${nameOnly}` : "");
-      buckets.sharedWithMe = await listFiles(req, q2, {
-        pageSize: limit,
-        corpora: "allDrives",
-        where: "sharedWithMe",
-      } as any);
+      buckets.sharedWithMe = await listFiles(auth, q2, "sharedWithMe", limit);
     }
 
-    // 3) Global/allDrives (name-first, no parent)
+    // 3) Global/allDrives (name-first)
     {
-      const q3 =
-        `trashed = false` + (nameOnly ? ` and ${nameOnly}` : "");
-      buckets.global = await listFiles(req, q3, {
-        pageSize: limit,
-        corpora: "allDrives",
-        where: "global",
-      } as any);
+      const q3 = `trashed = false` + (nameOnly ? ` and ${nameOnly}` : "");
+      buckets.global = await listFiles(auth, q3, "global", limit);
     }
 
     // De-dupe preserving priority: inFolder > sharedWithMe > global
@@ -164,9 +148,9 @@ export async function GET(req: Request) {
       { headers: { "content-type": "application/json" } }
     );
   } catch (e: any) {
-    return new Response(
-      JSON.stringify({ error: String(e?.message || e) }, null, 2),
-      { status: 500, headers: { "content-type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: String(e?.message || e) }, null, 2), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
   }
 }
