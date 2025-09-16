@@ -115,6 +115,16 @@ export default function NewLeadPage() {
   }
 
   return (
+    {/* Back to board */}
+    <div className="mb-2">
+      <a
+        href="/leads"
+        className="inline-flex items-center gap-1 text-sm text-emerald-700 hover:text-emerald-800"
+      >
+        ← Back to Lead Board
+      </a>
+    </div>
+
     <div className="mx-auto max-w-3xl p-4 space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Add Lead</h1>
