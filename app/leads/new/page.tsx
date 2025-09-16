@@ -115,6 +115,7 @@ export default function NewLeadPage() {
   }
 
   return (
+ <div className="mx-auto max-w-3xl p-4 space-y-4">
     {/* Back to board */}
     <div className="mb-2">
       <a
@@ -124,8 +125,7 @@ export default function NewLeadPage() {
         ← Back to Lead Board
       </a>
     </div>
-
-    <div className="mx-auto max-w-3xl p-4 space-y-4">
+   
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Add Lead</h1>
         <p className="text-sm text-gray-600">New leads are created as <strong>Unclaimed</strong>. Contact info will be hidden until claimed.</p>
