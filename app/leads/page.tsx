@@ -105,10 +105,14 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
       }
     />
   );
-}
-function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  "data-variant"?: "outline" | "solid";
+};
+
+function Button(props: ButtonProps) {
   const variant =
-    props["data-variant"] === "outline"
+    (props["data-variant"] ?? "solid") === "outline"
       ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
       : "bg-emerald-600 text-white hover:bg-emerald-700";
   return (
@@ -123,6 +127,7 @@ function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
     />
   );
 }
+
 
 /** Filters */
 function Filters({
