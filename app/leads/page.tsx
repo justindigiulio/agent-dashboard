@@ -314,7 +314,7 @@ export default function LeadClaimBoard() {
         await refresh("unclaimed");
         return;
       }
-      const claimed = res.lead;
+      const claimed = res.lead!;
       setUnclaimed((prev) => prev.filter((l) => l.id !== leadId));
       setMine((prev) => [claimed, ...prev]);
       setTab("mine");
