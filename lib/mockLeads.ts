@@ -73,3 +73,9 @@ export function claimLead(userId: string, leadId: string):
   };
   return { ok: true, lead: leads[i] };
 }
+export function addLead(lead: Lead): Lead {
+  // Put newest at the top
+  leads.unshift(lead);
+  return lead;
+}
+
