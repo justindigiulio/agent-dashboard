@@ -324,6 +324,16 @@ export default function LeadClaimBoard() {
       setLoading(false);
     }
   };
+<div className="flex items-center gap-2 text-xs text-gray-500">
+  <a
+    href="/leads/new"
+    className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+  >
+    + Add Lead
+  </a>
+  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+  Live feed
+</div>
 
   const header = (
     <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
