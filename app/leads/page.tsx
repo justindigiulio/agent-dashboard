@@ -343,10 +343,16 @@ export default function LeadClaimBoard() {
           First-come, first-serve. Contact details are visible only on your claimed leads.
         </p>
       </div>
-      <div className="flex items-center gap-2 text-xs text-gray-500">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-        Live feed
-      </div>
+    <div className="flex items-center gap-3">
+  <a
+    href="/leads/new"
+    className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+  >
+    + Add Lead
+  </a>
+  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+  <span className="text-xs text-gray-500">Live feed</span>
+</div>
     </div>
   );
 
