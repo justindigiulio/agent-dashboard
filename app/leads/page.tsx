@@ -105,7 +105,7 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
       }
     />
   );
-
+}
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   "data-variant"?: "outline" | "solid";
 };
