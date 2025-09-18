@@ -2,12 +2,12 @@
   "name": "agent-dashboard",
   "version": "0.1.0",
   "private": true,
-"scripts": {
-  "dev": "next dev",
-  "build": "npx prisma generate && npx prisma db push && next build",
-  "start": "next start",
-  "lint": "next lint"
-}
+  "scripts": {
+    "dev": "next dev",
+    "build": "npx prisma generate && npx prisma db push && next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
   "dependencies": {
     "@prisma/client": "^5.18.0",
     "@vercel/blob": "^0.23.2",
@@ -20,12 +20,12 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "prisma": "^5.18.0",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "prisma": "^5.18.0",
+    "tailwindcss": "^4",
     "typescript": "^5"
   },
   "engines": {
