@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { claimLead } from '@/lib/mockLeads';
+import { claimLead } from "../../../../lib/mockLeads";
 
 export async function POST(req: Request) {
   // Next 15: headers() is async
