@@ -2,12 +2,12 @@
   "name": "agent-dashboard",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && prisma db push && next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
+"scripts": {
+  "dev": "next dev",
+  "build": "npx prisma generate && npx prisma db push && next build",
+  "start": "next start",
+  "lint": "next lint"
+}
   "dependencies": {
     "@prisma/client": "^5.18.0",
     "@vercel/blob": "^0.23.2",
