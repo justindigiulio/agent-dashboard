@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { addLead, type Lead } from '@/lib/mockLeads';
+import { addLead, type Lead } from '../../../../lib/mockLeads';
 import { randomUUID } from 'crypto';
 
 export async function POST(req: Request) {
