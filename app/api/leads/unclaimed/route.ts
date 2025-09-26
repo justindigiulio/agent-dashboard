@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUnclaimed } from '@/lib/mockLeads';
+import { getUnclaimed } from '../../../../lib/mockLeads';
 
 
 export async function GET(){
