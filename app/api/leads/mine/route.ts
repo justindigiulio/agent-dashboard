@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { getMine } from '@/lib/mockLeads';
+import { getMine } from '../../../../lib/mockLeads';
+
 
 export async function GET() {
   // Next 15: headers() is async
