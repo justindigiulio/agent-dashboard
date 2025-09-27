@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect } from "react";
 
 const BuyerBudgetTool = () => {
@@ -16,11 +17,10 @@ const BuyerBudgetTool = () => {
   const [resultPurchasePrice, setResultPurchasePrice] = useState<null | number>(null);
   const [resultMonthlyCost, setResultMonthlyCost] = useState<null | number>(null);
 
-  // Fetch current 30‑year rate (example using FRED)
+  // Fetch current 30‑year fixed rate; you can swap this for another API
   useEffect(() => {
     (async () => {
       try {
-        // You can replace this with any reliable API endpoint
         const resp = await fetch(
           "https://api.api-ninjas.com/v1/mortgagerate",
           { headers: { "X-Api-Key": process.env.NEXT_PUBLIC_API_NINJAS_KEY || "" } }
@@ -33,33 +33,31 @@ const BuyerBudgetTool = () => {
     })();
   }, []);
 
-  // Mortgage payment formula
+  // Helper: monthly mortgage payment
   const monthlyPayment = (principal: number, annualRate: number, years: number) => {
     const n = years * 12;
     const r = annualRate / 100 / 12;
     return principal * r / (1 - Math.pow(1 + r, -n));
   };
 
-  // Convert monthly budget → purchase price
+  // Monthly budget → Purchase price
   const computePurchasePrice = () => {
     const budget = parseFloat(monthlyBudget);
     if (!budget) return;
-    // sum fees
     const fees =
       parseFloat(propertyType === "coop" ? maintenanceFee || "0" : (commonCharges || "0")) +
       parseFloat(propertyType === "condo" ? realEstateTax || "0" : "0");
     const mortgageBudget = budget - fees;
     const dpPct = downPaymentPct / 100;
-    // Solve for principal P such that monthlyPayment(P, rate) = mortgageBudget
-    const monthlyPaymentRate = interestRate / 100 / 12;
+    const monthlyRate = interestRate / 100 / 12;
     const n = termYears * 12;
-    const factor = monthlyPaymentRate / (1 - Math.pow(1 + monthlyPaymentRate, -n));
+    const factor = monthlyRate / (1 - Math.pow(1 + monthlyRate, -n));
     const principal = mortgageBudget / factor;
     const purchasePrice = principal / (1 - dpPct);
     setResultPurchasePrice(purchasePrice);
   };
 
-  // Convert purchase price → monthly cost
+  // Purchase price → Monthly cost
   const computeMonthlyCost = () => {
     const price = parseFloat(purchasePriceInput);
     if (!price) return;
@@ -120,7 +118,7 @@ const BuyerBudgetTool = () => {
         </select>
       </div>
 
-      {/* Input for monthly budget conversion */}
+      {/* Monthly budget → Purchase price */}
       <div className="border rounded p-4 space-y-2">
         <h2 className="font-semibold">Monthly budget → Purchase price</h2>
         <input
@@ -165,12 +163,13 @@ const BuyerBudgetTool = () => {
         </button>
         {resultPurchasePrice && (
           <div className="text-green-700">
-            Estimated purchase price: ${resultPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            Estimated purchase price: $
+            {resultPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         )}
       </div>
 
-      {/* Input for purchase price conversion */}
+      {/* Purchase price → Monthly cost */}
       <div className="border rounded p-4 space-y-2">
         <h2 className="font-semibold">Purchase price → Monthly cost</h2>
         <input
@@ -215,7 +214,8 @@ const BuyerBudgetTool = () => {
         </button>
         {resultMonthlyCost && (
           <div className="text-green-700">
-            Total monthly payment: ${resultMonthlyCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            Total monthly payment: $
+            {resultMonthlyCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         )}
       </div>
