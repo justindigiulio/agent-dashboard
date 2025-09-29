@@ -1,68 +1,79 @@
 // app/page.tsx
-import Image from "next/image";
+import AuthBadge from "../components/AuthBadge";
 
 const BRAND = {
   green: "#0B2A1E",
-  gold: "#C39A24",
-  goldSoftBg: "rgba(195,154,36,0.12)",
+  bg: "#F9FAFB",
 };
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main className="min-h-screen bg-white">
-      <div style={{ background: BRAND.gold }} className="h-1 w-full" />
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Image
-          src="/digiulio-logo.png"
-          alt="DiGiulio Group"
-          width={200}
-          height={48}
-          priority
-          style={{
-            filter:
-              "drop-shadow(0 0.5px 0 #ffffff) drop-shadow(0 2px 8px rgba(0,0,0,.16))",
-          }}
-        />
+    <div style={{ background: BRAND.bg, minHeight: "100vh" }}>
+      {/* Header */}
+      <header
+        className="flex items-center justify-between px-8 py-4 border-b"
+        style={{ borderColor: "#E5E7EB" }}
+      >
+        <div className="flex items-center gap-3">
+          <img
+            src="/logo.png"
+            alt="DiGiulio Group"
+            className="h-8 w-auto"
+          />
+          <span className="font-semibold text-lg" style={{ color: BRAND.green }}>
+            DiGiulio Agent Dashboard
+          </span>
+        </div>
         <nav className="text-sm flex items-center gap-5">
-          <a href="/leads" style={{ color: BRAND.green }}>Leads</a>
-          <a href="/buyer-budget" style={{ color: BRAND.green }}>Buyer Budget Tool</a>
-          <a href="/leads/add" style={{ color: BRAND.green }}>Add Lead</a>
+          <a href="/leads" style={{ color: BRAND.green }}>
+            Leads
+          </a>
+          <a href="/buyer-budget" style={{ color: BRAND.green }}>
+            Buyer Budget Tool
+          </a>
+          <a href="/leads/add" style={{ color: BRAND.green }}>
+            Add Lead
+          </a>
+          {/* Auth badge (sign in / sign out) */}
+          <AuthBadge />
         </nav>
       </header>
 
-      <section className="mx-auto max-w-6xl px-4 py-12">
-        <div className="grid gap-6 md:grid-cols-3">
-          <a href="/leads" className="group rounded-2xl border bg-white p-6 hover:shadow-lg transition">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: BRAND.goldSoftBg }}>
-              <span>🧲</span>
-            </div>
-            <h3 className="text-lg font-semibold" style={{ color: BRAND.green }}>Lead Claim Board</h3>
-            <p className="mt-1 text-sm text-gray-700">
-              Claim new inquiries. Contact info unlocks after claiming.
+      {/* Main content */}
+      <main className="max-w-5xl mx-auto py-12 px-6">
+        <h1 className="text-3xl font-semibold" style={{ color: BRAND.green }}>
+          Welcome to the Agent Dashboard
+        </h1>
+        <p className="mt-4 text-gray-700 text-lg">
+          Use this dashboard to manage leads, calculate buyer budgets, and track your activity.
+        </p>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <a
+            href="/leads"
+            className="rounded-xl border bg-white p-6 shadow hover:shadow-md transition"
+          >
+            <h2 className="text-xl font-medium" style={{ color: BRAND.green }}>
+              Lead Claim Board →
+            </h2>
+            <p className="mt-2 text-gray-600 text-sm">
+              Claim and manage new buyer & renter leads.
             </p>
           </a>
 
-          <a href="/buyer-budget" className="group rounded-2xl border bg-white p-6 hover:shadow-lg transition">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: BRAND.goldSoftBg }}>
-              <span>💰</span>
-            </div>
-            <h3 className="text-lg font-semibold" style={{ color: BRAND.green }}>Buyer Budget Tool</h3>
-            <p className="mt-1 text-sm text-gray-700">
-              Convert monthly budget ↔ purchase price with fees.
-            </p>
-          </a>
-
-          <a href="/leads/add" className="group rounded-2xl border bg-white p-6 hover:shadow-lg transition">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: BRAND.goldSoftBg }}>
-              <span>➕</span>
-            </div>
-            <h3 className="text-lg font-semibold" style={{ color: BRAND.green }}>Add Lead</h3>
-            <p className="mt-1 text-sm text-gray-700">
-              Manually add a prospect. Defaults to Unclaimed.
+          <a
+            href="/buyer-budget"
+            className="rounded-xl border bg-white p-6 shadow hover:shadow-md transition"
+          >
+            <h2 className="text-xl font-medium" style={{ color: BRAND.green }}>
+              Buyer Budget Tool →
+            </h2>
+            <p className="mt-2 text-gray-600 text-sm">
+              Help clients understand their purchasing power and monthly costs.
             </p>
           </a>
         </div>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
