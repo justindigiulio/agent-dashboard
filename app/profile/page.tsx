@@ -1,190 +1,168 @@
+// app/profile/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-type AgentProfile = {
-  userId: string;
-  bio: string;
-  headshotDataUrl?: string | null;
-  updatedAt: string;
+type Profile = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  headshotUrl: string | null;
+  bio: string | null;
 };
-
-function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      {...props}
-      className={
-        "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none " +
-        "focus:ring-2 focus:ring-emerald-500 " +
-        (props.className || "")
-      }
-    />
-  );
-}
-
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "solid" | "outline";
-};
-function Button({ variant = "solid", className = "", ...rest }: ButtonProps) {
-  const style =
-    variant === "outline"
-      ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
-      : "bg-emerald-600 text-white hover:bg-emerald-700";
-  return (
-    <button
-      {...rest}
-      className={
-        "inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition " +
-        style +
-        " " +
-        className
-      }
-    />
-  );
-}
 
 export default function ProfilePage() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [bio, setBio] = useState("");
-  const [headshotPreview, setHeadshotPreview] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch("/api/profile/me", { cache: "no-store" });
-      if (!r.ok) throw new Error(await r.text());
-      const data = (await r.json()) as { profile: AgentProfile };
-      setBio(data.profile.bio || "");
-      setHeadshotPreview(data.profile.headshotDataUrl || null);
-      setLastUpdated(data.profile.updatedAt || null);
-    } catch (e: any) {
-      setError(e.message || "Failed to load profile");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [status, setStatus] = useState<"loading" | "signedout" | "ready" | "error">("loading");
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    load();
+    let alive = true;
+    (async () => {
+      try {
+        // Hit your existing API (returns 401 when not authed)
+        const r = await fetch("/api/profile/me", { cache: "no-store" });
+        if (r.status === 401) {
+          if (alive) setStatus("signedout");
+          return;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        if (alive) {
+          setProfile(data?.profile ?? null);
+          setStatus("ready");
+        }
+      } catch (e: any) {
+        if (alive) {
+          setErr(e?.message || "Failed to load profile");
+          setStatus("error");
+        }
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] || null;
-    setFileToUpload(f);
-    if (f) {
-      const rd = new FileReader();
-      rd.onload = () => setHeadshotPreview(rd.result as string);
-      rd.readAsDataURL(f);
-    }
+  if (status === "loading") {
+    return <div className="mx-auto max-w-3xl p-6">Loading…</div>;
   }
 
-  async function onSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.set("bio", bio);
-      if (fileToUpload) form.set("headshot", fileToUpload);
-      const r = await fetch("/api/profile/update", { method: "POST", body: form });
-      if (!r.ok) throw new Error(await r.text());
-      const data = (await r.json()) as { ok: true; profile: AgentProfile };
-      setHeadshotPreview(data.profile.headshotDataUrl || null);
-      setLastUpdated(data.profile.updatedAt || null);
-    } catch (e: any) {
-      setError(e.message || "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-4xl p-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Agent Profile</h1>
-          <p className="text-sm text-gray-600">Headshot, bio, and (soon) your earnings.</p>
-        </div>
+  if (status === "signedout") {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-semibold">Your Profile</h1>
+        <p className="mt-2 text-gray-700">You’re signed out.</p>
         <a
-          href="/leads"
-          className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          href="/api/auth/signin?callbackUrl=/profile"
+          className="mt-4 inline-block rounded-lg border px-3 py-2 text-sm"
         >
-          ← Back to Lead Board
+          Sign in to view profile
         </a>
       </div>
+    );
+  }
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
+  if (status === "error") {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-semibold">Your Profile</h1>
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {err}
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {loading ? (
-        <div className="rounded-xl border bg-white p-10 text-center text-gray-500">Loading…</div>
-      ) : (
-        <form onSubmit={onSave} className="grid gap-6">
-          {/* Headshot */}
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="mb-3 text-lg font-semibold">Headshot</h2>
-            <div className="flex items-center gap-4">
-              <div className="h-24 w-24 overflow-hidden rounded-full border bg-gray-100">
-                {headshotPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={headshotPreview} alt="Headshot" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xs text-gray-500">
-                    No photo
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <input type="file" accept="image/*" onChange={onPickFile} />
-                <div className="text-xs text-gray-500">Max 2MB. JPG/PNG.</div>
-              </div>
-            </div>
-          </div>
+  // ready
+  return (
+    <div className="mx-auto max-w-3xl p-6 space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold">Your Profile</h1>
+        <p className="text-sm text-gray-600">
+          Headshot & bio are editable. Earnings/closed deals are <b>under construction</b>.
+        </p>
+      </header>
 
-          {/* Bio */}
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="mb-3 text-lg font-semibold">Bio</h2>
-            <TextArea
-              rows={5}
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Experience, specialties, languages, neighborhoods…"
+      <section className="rounded-2xl border p-5">
+        <h2 className="font-medium">Basic</h2>
+        <div className="mt-3 text-sm text-gray-800">
+          <div><span className="text-gray-500">Name:</span> {profile?.name || "—"}</div>
+          <div><span className="text-gray-500">Email:</span> {profile?.email || "—"}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="font-medium">Headshot</h2>
+        <div className="mt-3 flex items-center gap-4">
+          {profile?.headshotUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.headshotUrl}
+              alt="Headshot"
+              className="h-20 w-20 rounded-full object-cover border"
             />
-          </div>
-
-          {/* Earnings / Deals placeholder */}
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="mb-3 text-lg font-semibold">Gross Commissions & Closed Deals</h2>
-            <div className="rounded-lg border border-dashed p-6 text-sm text-gray-500">
-              Under construction — this will show your YTD gross commissions and a list of closed deals.
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => location.reload()}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Save Profile"}
-            </Button>
-          </div>
-
-          {lastUpdated && (
-            <div className="text-right text-xs text-gray-500">
-              Last updated {new Date(lastUpdated).toLocaleString()}
-            </div>
+          ) : (
+            <div className="h-20 w-20 rounded-full border bg-gray-50" />
           )}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const file = (e.currentTarget.elements.namedItem("photo") as HTMLInputElement)
+                ?.files?.[0];
+              if (!file) return;
+              const fd = new FormData();
+              fd.append("photo", file);
+              const r = await fetch("/api/profile/update", { method: "POST", body: fd });
+              if (r.ok) {
+                location.reload();
+              } else {
+                alert("Upload failed");
+              }
+            }}
+          >
+            <input type="file" name="photo" accept="image/*" className="text-sm" />
+            <button
+              type="submit"
+              className="ml-2 rounded-lg border px-3 py-1.5 text-sm"
+            >
+              Upload
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="font-medium">Bio</h2>
+        <form
+          className="mt-3 space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const bio = (e.currentTarget.elements.namedItem("bio") as HTMLTextAreaElement)?.value || "";
+            const r = await fetch("/api/profile/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ bio }),
+            });
+            if (r.ok) location.reload();
+            else alert("Failed to save bio");
+          }}
+        >
+          <textarea
+            name="bio"
+            defaultValue={profile?.bio || ""}
+            className="w-full rounded-md border p-2 text-sm"
+            rows={5}
+            placeholder="Write a short bio…"
+          />
+          <button type="submit" className="rounded-lg border px-3 py-1.5 text-sm">
+            Save
+          </button>
         </form>
-      )}
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="font-medium">Earnings / Closed deals</h2>
+        <div className="mt-2 text-sm text-gray-600">Under construction.</div>
+      </section>
     </div>
   );
 }
