@@ -1,8 +1,8 @@
-import { GeistSans } from 'next/font/geist';
+import "../app/globals.css";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-gray-100 font-geist">
       <aside className="w-64 bg-white shadow-md p-4">
         <h2 className="text-2xl font-bold mb-4">Agent Dashboard</h2>
         <nav>
