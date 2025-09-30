@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { get, put } from "@vercel/blob";
+import { getBlob, put } from "@vercel/blob";
 
 /**
  * We store a JSON blob per user at: profiles/{userId}.json
