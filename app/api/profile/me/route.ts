@@ -1,46 +1,21 @@
+import { blob } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { getBlob, put } from "@vercel/blob";
 
-/**
- * We store a JSON blob per user at: profiles/{userId}.json
- * For now we derive userId from the Bearer token (same pattern as your leads APIs).
- * Later we’ll swap this for NextAuth session once we turn it back on.
- */
+/** We store a JSON blob per user at: profiles/{userId}.json */
+export async function GET() {
+  const userId = headers().get("user-id"); // Example: Adjust based on your logic
+  if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-type Profile = {
-  userId: string;
-  bio: string;
-  avatarUrl: string | null; // public URL of the uploaded headshot (we’ll add upload in the next step)
-};
-
-function getUserIdFromHeaders(h: Headers) {
-  const auth = h.get("authorization") ?? "";
-  // TEMP: treat Bearer token as the user id (fallback to a default agent)
-  const userId = auth.replace(/^Bearer\s+/i, "") || "agent_123";
-  return userId;
+  const { url } = await blob.get(`profiles/${userId}.json`); // Use blob.get
+  return NextResponse.json({ url });
 }
 
-export async function GET() {
-  const h = await headers();
-  const userId = getUserIdFromHeaders(h);
+export async function PUT(request: Request) {
+  const userId = headers().get("user-id");
+  if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-  const key = `profiles/${userId}.json`;
-
-  // Try to read the blob. If it doesn't exist, return a default profile.
-  try {
-    const { blob } = await get(key);
-    // `blob.url` is a signed/public URL we can fetch to read the JSON
-    const res = await fetch(blob.url, { cache: "no-store" });
-    const data = (await res.json()) as Profile;
-    return NextResponse.json({ profile: data });
-  } catch (err: any) {
-    // Not found? Seed a default profile into Blob so future reads are fast.
-    const defaultProfile: Profile = { userId, bio: "", avatarUrl: null };
-    await put(key, JSON.stringify(defaultProfile), {
-      contentType: "application/json",
-      access: "public",
-    });
-    return NextResponse.json({ profile: defaultProfile });
-  }
+  const file = await request.blob();
+  const { url } = await blob.put(`profiles/${userId}.json`, file);
+  return NextResponse.json({ url });
 }
