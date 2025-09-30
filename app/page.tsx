@@ -1,16 +1,16 @@
 import "../app/globals.css";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Home, Users, FileText } from "lucide-react"; // Icons for navigation
+import { HomeIcon, Users, FileText } from "lucide-react"; // Renamed Home to HomeIcon
 
-export default function Home() {
+export default function Dashboard() { // Renamed from Home to Dashboard
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 font-geist">
       <aside className="w-64 bg-white shadow-lg p-4 fixed h-full border-r">
         <h2 className="text-2xl font-bold mb-6 text-gray-800">Agent Dashboard</h2>
         <nav className="space-y-2">
           <Button variant="ghost" className="w-full justify-start">
-            <Home className="mr-2 h-4 w-4" /> Home
+            <HomeIcon className="mr-2 h-4 w-4" /> Home
           </Button>
           <Button variant="ghost" className="w-full justify-start">
             <Users className="mr-2 h-4 w-4" /> Agents
