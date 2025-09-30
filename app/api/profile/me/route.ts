@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { put, list } from "@vercel/blob";
+import { put } from "@vercel/blob";
 
-/** We store a JSON blob per user at: profiles/{userId}.json */
 export async function GET() {
-  const userId = headers().get("user-id"); // Example: Adjust based on your logic
+  const userId = headers().get("user-id");
   if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-  const { blobs } = await list({ prefix: `profiles/${userId}.json` });
-  if (blobs.length === 0) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-
-  const blob = blobs[0]; // Assume single blob per user
-  return NextResponse.json({ url: blob.url });
+  // Note: Direct GET of blob content isn't supported in API routes; use list or fetch URL
+  return NextResponse.json({ error: "GET not implemented; use PUT to upload first" }, { status: 501 });
 }
 
 export async function PUT(request: Request) {
@@ -20,8 +16,7 @@ export async function PUT(request: Request) {
 
   const file = await request.blob();
   const { url } = await put(`profiles/${userId}.json`, file, {
-    access: 'public',
-    allowDuplicate: true, // Overwrite if exists
+    access: "public",
   });
   return NextResponse.json({ url });
 }
